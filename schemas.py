@@ -7,6 +7,21 @@ from pydantic.error_wrappers import ErrorWrapper
 
 
 class MultiExceptionsHandler(list):
+    """
+    Inherits from the builtins list but takes strings only to convert them to error \n
+    Class is a context manager (allows WITH construction) \n
+    Example: \n
+    with MultiExceptionsHandler() as exc:
+        if True:
+            exc += 'some exception message'
+        if True:
+            exc += 'some other exception message'
+        if False:
+            exc += 'another exception'
+
+    # Raised error: ValueError('some exception message', 'some other exception message')
+    """
+
     def __init__(self):
         super(MultiExceptionsHandler, self).__init__(())
 
@@ -14,6 +29,13 @@ class MultiExceptionsHandler(list):
         return super(MultiExceptionsHandler, self).append(exc)
 
     def try_raise(self) -> None:
+        """
+        Tries to raise exception if some was appended \n
+
+        Note: Method is relevant if you use it class as not as context manager
+
+        :return: None
+        """
         if len(self) != 0:
             raise ValueError(*self)
         return None
@@ -32,6 +54,9 @@ class MultiExceptionsHandler(list):
 
     @staticmethod
     def get_exception_info(exception: Exception) -> List[Tuple[str, Tuple[str]]]:
+        if exception.__class__ is ValueError:
+            return ValidationError(exception).errors()
+
         errors: List[ErrorWrapper] = exception.args[0]
         info = []
         for error in errors:
@@ -43,12 +68,12 @@ class MultiExceptionsHandler(list):
 
 # -- Message classes --
 class BaseMessage(BaseModel):
+    """
+    Base of message table
+    """
     sender_id: int
     receiver_id: int
     text: str
-
-
-class MessageCreate(BaseMessage):
 
     @validator('sender_id')
     def check_sender_existence(cls, sender_id: int):
@@ -63,17 +88,36 @@ class MessageCreate(BaseMessage):
         return text
 
 
+class MessageCreate(BaseMessage):
+    """
+    Has all necessary data to create Message \n
+    Here is no data (fields) to return it to user directly (as like as password)
+    """
+    pass
+
+
 class __MessageGet:
+    """
+    Intermediate class contains fields for MessageEdit and Message classes
+    """
     status: int
 
 
 class MessageEdit(MessageCreate, __MessageGet):
+    """
+    Contains editable fields
+    """
+
     @validator('status', check_fields=False)
     def check_status(cls, status: int):
         return status
 
 
 class Message(BaseMessage, __MessageGet):
+    """
+    Contains all data except data that cannot be returned
+    (like the password that may be contained in the UserCreate class)
+    """
     id: int
 
     # receiver: User
@@ -85,13 +129,33 @@ class Message(BaseMessage, __MessageGet):
 
 # -- User classes --
 class BaseUser(BaseModel):
+    """
+    Base of user table
+
+    :arg nik_name: acceptable len is [2, 32); accepted letters is [_a-zA-z0-9] + '@' as a first symbol
+    :arg fst_name: acceptable len is [2, 16]
+    :arg sec_name: acceptable len is [2, 16]
+    """
+
     nik_name: str
     fst_name: Optional[str] = None
     sec_name: Optional[str] = None
 
+    def __init__(self,
+                 nik_name: str,
+                 fst_name: Optional[str] = None,
+                 sec_name: Optional[str] = None,
+                 **other_data
+                 ):
+        data = {
+            'nik_name': nik_name
+        }
+        if fst_name is not None:
+            other_data['fst_name'] = fst_name
+        if sec_name is not None:
+            other_data['sec_name'] = sec_name
+        super().__init__(**data, **other_data)
 
-class UserCreate(BaseUser):
-    # @multi_error_validating('nik_name')
     @validator('nik_name')
     def check_nik_name(cls, nik_name: str):
         if nik_name.startswith('@'):
@@ -127,12 +191,68 @@ class UserCreate(BaseUser):
         return sec_name
 
 
-class __UserGet(BaseModel):
-    status: int
+class UserCreate(BaseUser):
+    """
+    Has all necessary data to create User \n
+    Here is no data (fields) to return it to user directly (as like as password)
+
+    :arg nik_name: acceptable len is [2, 32); accepted letters is [_a-zA-z0-9] + '@' as a first symbol
+    :arg fst_name: acceptable len is [2, 16]
+    :arg sec_name: acceptable len is [2, 16]
+    """
+
+    def __init__(self,
+                 nik_name: str,
+                 fst_name: Optional[str] = None,
+                 sec_name: Optional[str] = None,
+                 **other_data
+                 ):
+        super().__init__(nik_name, fst_name, sec_name, **other_data)
 
 
-class UserEdit(__UserGet, UserCreate):
-    @validator('status')
+class _UserGet(BaseModel):
+    """
+    Intermediate class contains fields for UserEdit and User classes
+
+    :arg status: acceptable values [0, 1]
+    """
+
+    status: int  # acceptable values is [0, 1]
+
+    def __init__(self, status: int, **other_data):
+        # self.status = status
+        data = {
+            'status': status
+        }
+        super().__init__(**data, **other_data)
+
+
+class UserEdit(BaseUser, _UserGet):
+    """
+    Contains editable fields
+
+    :arg nik_name: acceptable len is [2, 32); accepted letters is [_a-zA-z0-9] + '@' as a first symbol
+    :arg fst_name: acceptable len is [2, 16]
+    :arg sec_name: acceptable len is [2, 16]
+    :arg status: acceptable values [0, 1]
+    """
+
+    def __init__(self,
+                 nik_name: str,
+                 status: int,
+                 fst_name: Optional[str] = None,
+                 sec_name: Optional[str] = None,
+                 **other_data
+                 ):
+        data = {
+            'status': status
+        }
+
+        super(UserEdit, self).__init__(nik_name, fst_name, sec_name, **data, **other_data)
+
+        # super(_UserGet, self).__init__(status, **other_data)
+
+    @validator('status', check_fields=False)
     def check_status_is_correct(cls, status: int):
         with MultiExceptionsHandler() as exc:
             if status not in (0, 1):
@@ -141,11 +261,42 @@ class UserEdit(__UserGet, UserCreate):
         return status
 
 
-class User(BaseUser, __UserGet):
+class User(BaseUser, _UserGet):
+    """
+    Contains all data except data that cannot be returned
+    (like the password that may be contained in the UserCreate class)
+
+    :arg id: integer
+    :arg nik_name: acceptable len is [2, 32); accepted letters is [_a-zA-z0-9] + '@' as a first symbol
+    :arg fst_name: acceptable len is [2, 16]
+    :arg sec_name: acceptable len is [2, 16]
+    :arg status: acceptable values [0, 1]
+    :arg received_messages: List[Message], default is [],
+    :arg sent_messages: List[Message], default is [],
+    """
     id: int
 
     received_messages: List[Message] = []
     sent_messages: List[Message] = []
+
+    def __init__(self,
+                 _id: int,
+                 nik_name: str,
+                 status: int,
+                 received_messages: List[Message] = None,
+                 sent_messages: List[Message] = None,
+                 fst_name: Optional[str] = None,
+                 sec_name: Optional[str] = None,
+                 **other_data):
+        data = {
+            'id': _id
+        }
+        if received_messages is not None:
+            data['received_messages'] = received_messages
+        if sent_messages is not None:
+            data['sent_messages'] = sent_messages
+
+        super().__init__(nik_name, fst_name, sec_name, **data, **other_data)
 
     class Config:
         orm_mode = True
@@ -154,9 +305,11 @@ class User(BaseUser, __UserGet):
 # try:
 #     new_user_data = {
 #         'nik_name': "egor20vv",
-#         'aaa': 'some data'
+#         'status': 0,
+#         'fst_name': 'Egorka'
 #     }
-#     new_user = UserCreate(**new_user_data)
+#     new_user = UserEdit(**new_user_data)
+#     print(new_user.dict())
 #     pass
 # except ValidationError as e:
 #     print(e)
