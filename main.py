@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
 import uvicorn
 
-import crud
+from crud import user_crud, message_crud
 import models
 import schemas
 from schemas import ValidationError
@@ -22,8 +22,9 @@ class Dependencies:
     """
     Static class contains dependencies
 
-    Example:\n
-    Depends(Dependencies.<some_method>)
+    Example::
+
+        Depends(Dependencies.<some_method>)
 
     """
     class RoutingConstants:
@@ -60,9 +61,9 @@ class Dependencies:
         """
         try:
             with cls._SessionContextManager() as _db:
-                user = crud.get_user(_db, user_identifier) \
+                user = user_crud.get_user(_db, user_identifier) \
                     if type(user_identifier) is int \
-                    else crud.get_user_by_nik_name(_db, user_identifier)
+                    else user_crud.get_user_by_nik_name(_db, user_identifier)
                 return user.id
         except ValueError as e:  # User is not found exception
             raise HTTPException(
@@ -77,17 +78,17 @@ class Dependencies:
         Returns a function that returns UserEdit independent of a value and both possible taken new_user_data types \n
         ____
 
-        Example of use:\
+        Example of use::
 
-        fun: Callable[[models.User], schemas.UserEdit] \n
-        some_user_data: Union[schemas.UserEdit, dict] = {} \n
-        fun = Depends(Dependencies.complete_user_edit(some_user_data)) \n
+            fun: Callable[[models.User], schemas.UserEdit]
+            some_user_data: Union[schemas.UserEdit, dict] = {}
+            fun = Depends(Dependencies.complete_user_edit(some_user_data))
 
         :param new_user_data: is a schema of UserEdit or dict with incomplete data of UserEdit
         :return: fun(user: models.User) -> schemas.UserEdit
         :except HTTPException: [raises form the returned function] occurs if passed
-        argument (user: models.User or new_user_data: as dict [from "parent" function]) will contain some
-        unacceptable to validate data
+            argument (user: models.User or new_user_data: as dict [from "parent" function]) will contain some
+            unacceptable to validate data
         """
         cls._new_user_data = new_user_data
 
@@ -127,13 +128,13 @@ def root():
 
 @app.get('/users/', response_model=List[schemas.User], status_code=status.HTTP_200_OK)
 def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(Dependencies.get_db)):
-    users = crud.get_users(db, skip, limit)
+    users = user_crud.get_users(db, skip, limit)
     return users
 
 
 @app.get('/users/count', response_model=Dict[str, int], status_code=status.HTTP_200_OK)
 def get_users_count(db: Session = Depends(Dependencies.get_db)):
-    return {'Count of users': crud.get_users_count(db)}
+    return {'Count of users': user_crud.get_users_count(db)}
 
 
 @app.get('/users/{' + Dependencies.RoutingConstants.user_identifier + '}',
@@ -143,13 +144,13 @@ def get_user(
         user_id: int = Depends(Dependencies.try_to_get_user_id),
         db: Session = Depends(Dependencies.get_db)
 ):
-    return crud.get_user(db, user_id)
+    return user_crud.get_user(db, user_id)
 
 
 @app.post('/users/', response_model=schemas.User, status_code=status.HTTP_201_CREATED)
 def post_user(user_data: schemas.UserCreate, db: Session = Depends(Dependencies.get_db)):
     try:
-        return crud.post_user(db, user_data=user_data)
+        return user_crud.post_user(db, user_data=user_data)
     except ValueError as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -168,9 +169,9 @@ def put_user(
         db: Session = Depends(Dependencies.get_db)
 ):
     # Try to update user
-    user = crud.get_user(db, user_id)
+    user = user_crud.get_user(db, user_id)
     new_user_data = fun_complete_user_edit(user)
-    return crud.put_user(db, user=user, new_user_data=new_user_data)
+    return user_crud.put_user(db, user=user, new_user_data=new_user_data)
 
 
 @app.delete('/users/{user_identifier}', response_model=schemas.User, status_code=status.HTTP_200_OK)
@@ -178,8 +179,8 @@ def delete_user(
         user_id: int = Depends(Dependencies.try_to_get_user_id),
         db: Session = Depends(Dependencies.get_db)
 ):
-    user_to_del = crud.get_user(db, user_id)
-    crud.del_user(db, user_to_del)
+    user_to_del = user_crud.get_user(db, user_id)
+    user_crud.del_user(db, user_to_del)
 
 
 if __name__ == '__main__':

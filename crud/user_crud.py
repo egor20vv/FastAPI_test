@@ -14,7 +14,6 @@ def get_user(db: Session, user_id: int) -> models.User:
     :return: sought user from model
     :except ValueError: occurs if user is not found by id
     """
-    db.query(models.User).exists()
     query = db.query(models.User).filter(models.User.id == user_id).first()
     if not query:
         raise ValueError(f'user with id \'{user_id}\' is not found')
@@ -25,9 +24,10 @@ def get_user_by_nik_name(db: Session, nik_name: str) -> models.User:
     """
     Returns user searching by a nick name\n
 
-    Note nick_name:
-    \n format: "@<some nick name>"
-    \n example: "@some_user"
+    Note nick_name::
+
+        format: "@<some nick name>"
+        example: "@some_user"
 
     :param db: current session
     :param nik_name: users nick name
