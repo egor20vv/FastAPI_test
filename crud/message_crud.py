@@ -5,10 +5,11 @@ import models
 import schemas
 
 from database import SessionLocal
-from crud_decorators import does_raise_error
+
+from . import crud_decorators
 
 
-@does_raise_error
+@crud_decorators.does_raise_error
 def get_message(db: Session, message_id, raise_error: bool = True) -> Optional[models.Message]:
     """
     Returns message found by id

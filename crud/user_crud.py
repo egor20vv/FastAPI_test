@@ -4,8 +4,11 @@ from typing import List, Union
 import models
 import schemas
 
+from . import crud_decorators
 
-def get_user(db: Session, user_id: int) -> models.User:
+
+@crud_decorators.does_raise_error('raise_error')
+def get_user(db: Session, user_id: int, **_) -> models.User:
     """
     Returns user by id
 
@@ -20,7 +23,8 @@ def get_user(db: Session, user_id: int) -> models.User:
     return query
 
 
-def get_user_by_nik_name(db: Session, nik_name: str) -> models.User:
+@crud_decorators.does_raise_error('raise_error')
+def get_user_by_nik_name(db: Session, nik_name: str, **_) -> models.User:
     """
     Returns user searching by a nick name\n
 
@@ -73,9 +77,8 @@ def post_user(db: Session, user_data: schemas.UserCreate) -> models.User:
     :except ValueError: occurs if user with the given nick name is already taken
     """
 
-    try:
-        get_user_by_nik_name(db, user_data.nik_name)
-    except Exception as e:
+    user = get_user_by_nik_name(db, user_data.nik_name, raise_error=False)
+    if user is None:
         new_user = models.User(**user_data.dict())
         db.add(new_user)
         db.commit()
