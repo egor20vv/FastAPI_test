@@ -173,12 +173,13 @@ def put_user(
     return crud.put_user(db, user=user, new_user_data=new_user_data)
 
 
-# @app.delete('/users/{user_identifier}', response_model=schemas.User, status_code=status.HTTP_200_OK)
-# def delete_user(
-#         user_id: int = Depends(Dependencies.try_to_get_user_id),
-#         db: Session = Depends(Dependencies.get_db)
-# ):
-#      pass
+@app.delete('/users/{user_identifier}', response_model=schemas.User, status_code=status.HTTP_200_OK)
+def delete_user(
+        user_id: int = Depends(Dependencies.try_to_get_user_id),
+        db: Session = Depends(Dependencies.get_db)
+):
+    user_to_del = crud.get_user(db, user_id)
+    crud.del_user(db, user_to_del)
 
 
 if __name__ == '__main__':
