@@ -1,8 +1,7 @@
-from typing import List, Optional, IO, Union, Dict, Callable
+from typing import List, Optional, Union, Dict, Callable, Generator, Any
 
 from fastapi.responses import JSONResponse
 from fastapi import Depends, FastAPI, HTTPException, status
-from pydantic.error_wrappers import ErrorWrapper
 from sqlalchemy.orm import Session
 import uvicorn
 
@@ -13,12 +12,23 @@ from schemas import ValidationError
 
 from database import SessionLocal, engine
 
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 
 class Dependencies:
+    """
+    Static class contains dependencies
+
+    Example:\n
+    Depends(Dependencies.<some_method>)
+
+    """
+    class RoutingConstants:
+        user_identifier = "user_identifier"
+
     class _SessionContextManager:
         def __init__(self, session: Session = SessionLocal()):
             self.session = session
@@ -30,12 +40,24 @@ class Dependencies:
             self.session.close()
 
     @classmethod
-    def get_db(cls):
+    def get_db(cls) -> Generator[Session, Any, None]:
+        """
+        The generator returning a session
+        """
+
         with cls._SessionContextManager() as db:
             yield db
 
     @classmethod
     def try_to_get_user_id(cls, user_identifier: Union[int, str]) -> int:
+        """
+        Tries to return the user_id found by user_identifier, which is user_id or user_nick_name\n
+        Otherwise raises a error
+
+        :param user_identifier: union[user_id: int, user_nick_name: string]
+        :return: found user_id
+        :except HTTPException: 404 (user is not found)
+        """
         try:
             with cls._SessionContextManager() as _db:
                 user = crud.get_user(_db, user_identifier) \
@@ -51,6 +73,22 @@ class Dependencies:
     @classmethod
     def complete_user_edit(cls, new_user_data: Union[schemas.UserEdit, dict]) -> \
             Callable[[models.User], schemas.UserEdit]:
+        """
+        Returns a function that returns UserEdit independent of a value and both possible taken new_user_data types \n
+        ____
+
+        Example of use:\
+
+        fun: Callable[[models.User], schemas.UserEdit] \n
+        some_user_data: Union[schemas.UserEdit, dict] = {} \n
+        fun = Depends(Dependencies.complete_user_edit(some_user_data)) \n
+
+        :param new_user_data: is a schema of UserEdit or dict with incomplete data of UserEdit
+        :return: fun(user: models.User) -> schemas.UserEdit
+        :except HTTPException: [raises form the returned function] occurs if passed
+        argument (user: models.User or new_user_data: as dict [from "parent" function]) will contain some
+        unacceptable to validate data
+        """
         cls._new_user_data = new_user_data
 
         def _complete_user_edit(new_data: dict, old_data):
@@ -66,14 +104,14 @@ class Dependencies:
 
             return new_data
 
-        def wrapper(user: models.User) -> Union[schemas.UserEdit, JSONResponse]:
+        def wrapper(user: models.User) -> schemas.UserEdit:
             try:
                 if cls._new_user_data.__class__ is dict:
                     return schemas.UserEdit(**_complete_user_edit(cls._new_user_data, user))
                 else:
                     return cls._new_user_data
 
-            except ValidationError as e:
+            except ValidationError as e:  # Validation error occurs
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=e.errors()
@@ -98,12 +136,14 @@ def get_users_count(db: Session = Depends(Dependencies.get_db)):
     return {'Count of users': crud.get_users_count(db)}
 
 
-@app.get('/users/{user_identifier}', response_model=schemas.User, status_code=status.HTTP_200_OK)
+@app.get('/users/{' + Dependencies.RoutingConstants.user_identifier + '}',
+         response_model=schemas.User,
+         status_code=status.HTTP_200_OK)
 def get_user(
         user_id: int = Depends(Dependencies.try_to_get_user_id),
         db: Session = Depends(Dependencies.get_db)
 ):
-    return crud.get_user(db, user_id)  # try_to_get_user(db, user_identifier)
+    return crud.get_user(db, user_id)
 
 
 @app.post('/users/', response_model=schemas.User, status_code=status.HTTP_201_CREATED)
@@ -119,7 +159,9 @@ def post_user(user_data: schemas.UserCreate, db: Session = Depends(Dependencies.
         )
 
 
-@app.put('/users/{user_identifier}', response_model=schemas.User, status_code=status.HTTP_200_OK)
+@app.put('/users/{' + Dependencies.RoutingConstants.user_identifier + '}',
+         response_model=schemas.User,
+         status_code=status.HTTP_200_OK)
 def put_user(
         user_id: int = Depends(Dependencies.try_to_get_user_id),
         fun_complete_user_edit: Callable[[models.User], schemas.UserEdit] = Depends(Dependencies.complete_user_edit),
@@ -128,17 +170,7 @@ def put_user(
     # Try to update user
     user = crud.get_user(db, user_id)
     new_user_data = fun_complete_user_edit(user)
-    try:
-        return crud.put_user(db, user=user, new_user_data=new_user_data)
-    except Exception as e:
-        print(e)
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                'type': 'db crashed (i guess)',
-                'details': 'check logs'
-            }
-        )
+    return crud.put_user(db, user=user, new_user_data=new_user_data)
 
 
 # @app.delete('/users/{user_identifier}', response_model=schemas.User, status_code=status.HTTP_200_OK)
@@ -151,4 +183,3 @@ def put_user(
 
 if __name__ == '__main__':
     uvicorn.run("main:app", port=5000, reload=True, access_log=False)
-    # app.get('/users/', response_model=List[schemas.User], status_code=status.HTTP_200_OK)(schema_validator)()
