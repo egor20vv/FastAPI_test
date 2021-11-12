@@ -6,27 +6,24 @@ import schemas
 
 from database import SessionLocal
 
-from . import crud_decorators
+from crud.crud_decorators import does_raise_error
 
 
-@crud_decorators.does_raise_error
-def get_message(db: Session, message_id, raise_error: bool = True) -> Optional[models.Message]:
+@does_raise_error('raise_error')
+def get_message(db: Session, message_id, **_) -> Optional[models.Message]:
     """
     Returns message found by id
 
     :param db: current session
     :param message_id: message id
-    :param raise_error:
-        [unnecessary argument]
-        if it's True and if am error occurs, function will raise error;
-        otherwise if it's False and an error occurs, function will return None
 
-    :return: models.Message only if :param raise_error: is True; otherwise maybe either models.Message or None
+    :return: models.Message or None
+    :except ValueError: if message was not found
     """
     query: Query = db.query(models.Message).filter(models.Message.id == message_id)
     message: Optional[models.Message] = query.first()
 
-    if not raise_error or message is not None:
+    if message is not None:
         return message
     else:
         raise ValueError(f'message with id \'{message_id}\' is not found')

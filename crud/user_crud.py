@@ -4,10 +4,10 @@ from typing import List, Union
 import models
 import schemas
 
-from . import crud_decorators
+from crud.crud_decorators import does_raise_error
 
 
-@crud_decorators.does_raise_error('raise_error')
+@does_raise_error('raise_error')
 def get_user(db: Session, user_id: int, **_) -> models.User:
     """
     Returns user by id
@@ -23,7 +23,7 @@ def get_user(db: Session, user_id: int, **_) -> models.User:
     return query
 
 
-@crud_decorators.does_raise_error('raise_error')
+@does_raise_error('raise_error')
 def get_user_by_nik_name(db: Session, nik_name: str, **_) -> models.User:
     """
     Returns user searching by a nick name\n
