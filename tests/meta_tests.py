@@ -1,60 +1,98 @@
+from typing import Dict, Tuple, Union
+from typing import Any
+
+from pydantic import BaseModel, BaseConfig
+from pydantic.fields import ModelField
+
+
 class CallStaticInit:
 
-    def some_func(self):
-        print('from some func:', self.attr)
+    @staticmethod
+    def _add_fields(meta_model: Dict[str, Union[Any, Tuple[Any, Any]]]):
+        def decorator(meta_cls):
 
-    my_attr: str = 'my attr'
+            type_meta_model = {}
+            for key, val in meta_model.items():
+                _type: None
+                if val.__class__ is Tuple[Any, Any]:
+                    _type, _val = val
+                    if _val.__class__ is _type:
+                        setattr(meta_cls, key, _val)
+                    else:
+                        raise ValueError(f'meta_model["{key}"] has wrong item (Tuple[val_type, value]): '
+                                         f'the value "{_val}" has other type differs to the val_type "{_type}"')
+                else:
+                    _type = val
 
-    def __init__(self, *args, **kwargs):
-        print('__init__')
-        new_class = type(*args)
-        new_class.my_attrr: str = 'my str'
+                if _type.__class__ is not type:
+                    raise ValueError(f'meta_model["{key}"] has wrong item: {_type} is not a type')
 
-        new_class.my_func1 = self.some_func
-        self.meta = new_class
-        # return new_class
+                type_meta_model.__setitem__(key, _type)
 
-    def __call__(self, *args, **kwargs):
-        print('__call__')
-        return self.meta
+            if hasattr(meta_cls, '__annotations__'):
+                old_annotations = meta_cls.__annotations__
+                type_meta_model.update(old_annotations)
+            meta_cls.__annotations__ = type_meta_model
 
-    # def __new__(cls, *args, **kwargs):
-    #     new_class = type(*args)
-    #     new_class.my_attrr: str = 'my str'
-    #
-    #     new_class.my_func = cls.some_func
-    #
-    #     return new_class
+            return meta_cls
+
+        return decorator
+
+    @staticmethod
+    def _args_to_kwargs(_args: Tuple[Tuple[Any], Dict[str, Any]], _model: Dict[str, Any]) -> Dict[str, Any]:
+        loc_args, loc_kwargs = _args
+        is_kwargs = len(loc_kwargs) > 0
+        is_args = len(loc_args) > 0
+        loc_args_index: int = 0
+
+        result: Dict[str, Any] = {}
+        for key, type_ in _model.items():
+            if is_kwargs and key in loc_kwargs.keys():
+                loc_kwargs_val = loc_kwargs[key]
+                if loc_kwargs_val.__class__ is type_:
+                    result[key] = loc_kwargs_val
+                else:
+                    TypeError('Some error')
+            elif is_args and loc_args[loc_args_index].__class__ is type_:
+                result[key] = loc_args[loc_args_index]
+                loc_args_index += 1
+            else:
+                ValueError(f'filed required {key}')
+        return result
+
+    def __new__(cls, *args, **kwargs):
+        external = type(*args)
+
+        _create_model = {
+            'name': str,
+            'status': int
+        }
+
+        @cls._add_fields(_create_model)
+        class Create(BaseModel):
+            def __init__(self, *args, **kwargs):
+                data = cls._args_to_kwargs((args, kwargs), _create_model)
+                super().__init__(**data)
+
+            class Config:
+                extra = 'allow'
+
+        external.Create = Create
+
+        return external
 
 
-def call_static_init(cls):
-    if getattr(cls, '__static_init__', None):
-        cls.__static_init__()
-    return cls
-
-
-# @CallStaticInit
 class BaseSchema(metaclass=CallStaticInit):
-
-    attr: int = 10
-
-    @classmethod
-    def __static_init__(cls):
-        print('BaseSchema static init')
+    pass
 
 
-# aa = CallStaticInit()
-
-bs = BaseSchema()
-print(bs.my_attrr)
-bs.my_func()
-
-print(BaseSchema.__dict__)
+class BaseSchema1(metaclass=CallStaticInit):
+    pass
 
 
-#
-# class MySchema(BaseSchema):
-#
-#     @classmethod
-#     def __static_init__(cls):
-#         print('MySchema static init')
+my_create = BaseSchema.Create('Egor', 4)
+print(my_create.dict())
+
+create1 = BaseSchema.Create
+create2 = BaseSchema1.Create
+print(id(create1) == id(create2))
