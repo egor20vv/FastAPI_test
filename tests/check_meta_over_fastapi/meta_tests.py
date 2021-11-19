@@ -1,9 +1,8 @@
 from enum import IntFlag, auto
-from typing import Dict, Tuple, Union, Callable, List, Iterable
+from typing import Dict, Tuple, Iterable
 from typing import Any
 
-from pydantic import BaseModel, BaseConfig, validator
-from pydantic.fields import ModelField
+from pydantic import BaseModel, validator, create_model
 
 
 class InteractionKinds(IntFlag):
@@ -105,7 +104,10 @@ class MetaSchemaFactory:
 
         arg_name = iter(_model_names)
         for arg_val in _args:
-            data[next(arg_name)] = arg_val
+            name = next(arg_name, None)
+            if name is None:
+                break
+            data[name] = arg_val
         for i in _kwargs.keys():
             name = next(arg_name, None)
             if name is None:
@@ -115,15 +117,24 @@ class MetaSchemaFactory:
         return data
 
     @classmethod
-    def _create_base_model_class(cls, _model: Dict[str, Tuple]) -> Any:
-        @cls._add_fields(_model)
-        class LocBaseModel(BaseModel):
+    def _create_base_model_class(cls, model_name: str, _model: Dict[str, Tuple]) -> Any:
 
-            class Config:
-                extra = 'allow'
+        fields = {}
+        for key, attr in _model.items():
+            if len(attr) == 1:
+                fields[key] = (attr[0], ...)
+            elif len(attr) == 2:
+                fields[key] = attr
+
+        class LocalConfig:
+            orm_mode = True
+
+        basis_model = create_model(model_name, __config__=LocalConfig, **fields)
+
+        class LocBaseModel(basis_model):
 
             def __init__(self, *args, **kwargs):
-                if args != () and args[0].__class__ == LocBaseModel:
+                if args != () and issubclass(args[0].__class__, BaseModel):
                     super().__init__(**args[0].dict())
                 else:
                     data = cls._args_to_kwargs(args, kwargs, _model.keys())
@@ -161,63 +172,8 @@ class MetaSchemaFactory:
 
         cls._set_models(external, _create_model, _edit_model, _get_model)
 
-        external.Create = cls._create_base_model_class(_create_model)
-        external.Edit = cls._create_base_model_class(_edit_model)
-        external.Get = cls._create_base_model_class(_get_model)
+        external.Create = cls._create_base_model_class('Create', _create_model)
+        external.Edit = cls._create_base_model_class('Edit', _edit_model)
+        external.Get = cls._create_base_model_class('Get', _get_model)
 
         return external
-
-
-IK = InteractionKinds
-
-
-class BaseSchema(metaclass=MetaSchemaFactory):
-    id = SchemaField(int, IK.GETABLE)
-    name = SchemaField(str, IK.GETABLE | IK.EDITABLE | IK.CREATABLE)
-    password = SchemaField(str, IK.CREATABLE)
-    status = SchemaField(int, IK.EDITABLE | IK.GETABLE, 0)
-
-    @classmethod
-    @MetaSchemaFactory.constructor_interface(IK.CREATABLE)
-    def init_create(cls, name: str, password: str, **kwargs):
-        return None
-
-    @classmethod
-    @MetaSchemaFactory.constructor_interface(IK.GETABLE)
-    def init_get(cls, id_: int, name: str, status: int):
-        return None
-
-    @classmethod
-    @MetaSchemaFactory.constructor_interface(IK.EDITABLE)
-    def init_edit(cls, name: str, status: int):
-        return None
-
-
-class BaseSchema1(metaclass=MetaSchemaFactory):
-    pass
-
-
-user_data = {
-    'id': 1,
-    'name': 'Egor',
-    'password': 'password',
-    'status': 10
-}
-
-
-kwargs_to_manual_init = BaseSchema.init_create(**user_data)
-print(kwargs_to_manual_init.dict())
-
-other_to_init = BaseSchema.Create(kwargs_to_manual_init)
-print(other_to_init.dict())
-
-args_to_init = BaseSchema.Create('Egor', 'password')
-print(args_to_init.dict())
-
-kwargs_to_init = BaseSchema.Create(**user_data)
-print(kwargs_to_init.dict())
-
-
-create1 = BaseSchema.Create
-create2 = BaseSchema1.Create
-print(id(create1) == id(create2))
