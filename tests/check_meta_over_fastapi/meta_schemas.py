@@ -1,4 +1,4 @@
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, create_model, validator
 
 from tests.check_meta_over_fastapi.meta_tests import MetaSchemaFactory, SchemaField
 from tests.check_meta_over_fastapi.meta_tests import InteractionKinds as IK
@@ -9,6 +9,13 @@ class BaseSchema(metaclass=MetaSchemaFactory):
     name = SchemaField(str, IK.GETABLE | IK.EDITABLE | IK.CREATABLE)
     password = SchemaField(str, IK.CREATABLE)
     status = SchemaField(int, IK.EDITABLE | IK.GETABLE, 0)
+
+    @MetaSchemaFactory.validator('status')
+    def check_status(cls, status):
+        if status not in range(4):
+            raise ValueError(f'status must be in range [0;4), but now is {status}')
+        else:
+            return status
 
     @classmethod
     @MetaSchemaFactory.constructor_interface(IK.CREATABLE)
@@ -61,16 +68,23 @@ def check_cross_schemas_constructing(user_data: dict):
     print(edit.dict())
 
 
+def check_validators(user_data: dict):
+    edit1 = BaseSchema.init_edit('Egor', 1)
+    # raises error:
+    # edit2 = BaseSchema.init_edit('Sonya', 10)
+
+
 def main():
     user_data = {
         'id': 1,
         'name': 'Egor',
         'password': 'password',
-        'status': 10
+        'status': 3
     }
 
-    # check_constructors(user_data)
-    # check_cross_schemas_constructing(user_data)
+    check_constructors(user_data)
+    check_cross_schemas_constructing(user_data)
+    check_validators(user_data)
 
     return
 

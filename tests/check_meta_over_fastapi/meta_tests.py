@@ -65,6 +65,27 @@ class MetaSchemaFactory:
         return decorator
 
     @classmethod
+    def validator(cls, filed_name: str):
+        def decorator(fun):
+            return cls._ValidatorWrapper(fun, filed_name)
+        return decorator
+
+    class _ValidatorWrapper:
+        def get_fun(self):
+            return self._fun
+
+        def get_fun_name(self) -> str:
+            return self._name
+
+        def get_field_name(self) -> str:
+            return self._field_name
+
+        def __init__(self, fun, field_name: str):
+            self._fun = fun
+            self._name = fun.__name__
+            self._field_name = field_name
+
+    @classmethod
     def _add_fields(cls, meta_model: Dict[str, Tuple]):
         def decorator(meta_cls):
 
@@ -117,7 +138,10 @@ class MetaSchemaFactory:
         return data
 
     @classmethod
-    def _create_base_model_class(cls, model_name: str, _model: Dict[str, Tuple]) -> Any:
+    def _create_base_model_class(cls,
+                                 model_name: str,
+                                 _model: Dict[str, Tuple],
+                                 validator_wrappers: Iterable[_ValidatorWrapper]) -> Any:
 
         fields = {}
         for key, attr in _model.items():
@@ -129,7 +153,13 @@ class MetaSchemaFactory:
         class LocalConfig:
             orm_mode = True
 
-        basis_model = create_model(model_name, __config__=LocalConfig, **fields)
+        validators = {}
+        for valid in validator_wrappers:
+            validators[valid.get_fun_name()] = validator(valid.get_field_name(),
+                                                         check_fields=False,
+                                                         allow_reuse=True)(valid.get_fun())
+
+        basis_model = create_model(model_name, __config__=LocalConfig, __validators__=validators, **fields)
 
         class LocBaseModel(basis_model):
 
@@ -166,14 +196,23 @@ class MetaSchemaFactory:
     def __new__(cls, *args, **kwargs):
         external = type(*args)
 
+        validators = []
+        # for func_name, func in args[2].items():
+        #     if hasattr(func, '__dict__') and '__validator_config__' in func.__dict__.keys():
+        #         validators[func_name] = func
+
+        for func_name, func in args[2].items():
+            if func.__class__ is cls._ValidatorWrapper:
+                validators.append(func)
+
         _create_model = {}
         _edit_model = {}
         _get_model = {}
 
         cls._set_models(external, _create_model, _edit_model, _get_model)
 
-        external.Create = cls._create_base_model_class('Create', _create_model)
-        external.Edit = cls._create_base_model_class('Edit', _edit_model)
-        external.Get = cls._create_base_model_class('Get', _get_model)
+        external.Create = cls._create_base_model_class('Create', _create_model, validators)
+        external.Edit = cls._create_base_model_class('Edit', _edit_model, validators)
+        external.Get = cls._create_base_model_class('Get', _get_model, validators)
 
         return external
