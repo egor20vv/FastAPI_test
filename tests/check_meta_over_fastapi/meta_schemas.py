@@ -3,10 +3,10 @@ from tests.check_meta_over_fastapi.MetaBaseModel.main import MetaSchemaFactory, 
 
 
 class BaseSchema(metaclass=MetaSchemaFactory):
-    id = SchemaField(int, IK.GETABLE)
-    name = SchemaField(str, IK.GETABLE | IK.EDITABLE | IK.CREATABLE)
-    password = SchemaField(str, IK.CREATABLE)
-    status = SchemaField(int, IK.EDITABLE | IK.GETABLE, 0)
+    id = SchemaField(int, IK.GET)
+    name = SchemaField(str, IK.ALL)
+    password = SchemaField(str, IK.CREATE)
+    status = SchemaField(int, IK.EDIT | IK.GET, 0)
 
     @meta_validator('status')
     def check_status(cls, status):
@@ -16,17 +16,17 @@ class BaseSchema(metaclass=MetaSchemaFactory):
             return status
 
     @classmethod
-    @meta_constructor(IK.CREATABLE)
+    @meta_constructor(IK.CREATE)
     def init_create(cls, name: str, password: str, **kwargs):
         return None
 
     @classmethod
-    @meta_constructor(IK.GETABLE)
+    @meta_constructor(IK.GET)
     def init_get(cls, id: int, name: str, status: int = 0, **kwargs):
         return None
 
     @classmethod
-    @meta_constructor(IK.EDITABLE)
+    @meta_constructor(IK.EDIT)
     def init_edit(cls, name: str, status: int = 0, **kwargs):
         return None
 
@@ -51,8 +51,8 @@ def check_constructors(user_data: dict):
     print(kwargs_to_init.dict())
 
     # Here is error occurs:
-    # not_enough_args = BaseSchema.Create('Egor')
-    # print(not_enough_args.dict())
+    not_enough_args = BaseSchema.Create(**{'name': 'Egor'})
+    print(not_enough_args.dict())
 
 
 def check_cross_schemas_constructing(user_data: dict):

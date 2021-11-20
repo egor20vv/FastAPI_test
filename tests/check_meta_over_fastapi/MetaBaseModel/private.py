@@ -20,7 +20,7 @@ class ValidatorWrapper:
 
 
 def args_to_kwargs(_args: Tuple[Any], _kwargs: Dict[str, Any], _model_names: Iterable[str]) -> Dict[str, Any]:
-    data = {}
+    data = _kwargs.copy()
 
     arg_name = iter(_model_names)
     for arg_val in _args:
@@ -28,11 +28,6 @@ def args_to_kwargs(_args: Tuple[Any], _kwargs: Dict[str, Any], _model_names: Ite
         if name is None:
             break
         data[name] = arg_val
-    for i in _kwargs.keys():
-        name = next(arg_name, None)
-        if name is None:
-            break
-        data[name] = _kwargs[name]
 
     return data
 
@@ -47,9 +42,6 @@ def check_model(meta_model: Dict[str, Tuple]):
         elif len(val) != 1:
             raise ValueError(f'meta_model["{key}"] has wrong tuple value "{val}": '
                              f'accepted (Tuple[<field_type>,<default_value>] or Tuple[<field_type>]) ')
-
-        if val[0].__class__ is not type:
-            raise ValueError(f'meta_model["{key}"] has wrong item: {val[0]} is not a type')
 
     return None
 
@@ -66,18 +58,13 @@ def create_base_model_class(model_name: str,
         elif len(attr) == 2:
             fields[key] = attr
 
-    class LocalConfig:
-        orm_mode = True
-
     validators = {}
     for valid in validator_wrappers:
         validators[valid.get_fun_name()] = validator(valid.get_field_name(),
                                                      check_fields=False,
                                                      allow_reuse=True)(valid.get_fun())
 
-    basis_model = create_model(model_name, __config__=LocalConfig, __validators__=validators, **fields)
-
-    class LocBaseModel(basis_model):
+    class LocBaseModel(BaseModel):
 
         def __init__(self, *args, **kwargs):
             if args != () and issubclass(args[0].__class__, BaseModel):
@@ -86,4 +73,11 @@ def create_base_model_class(model_name: str,
                 data = args_to_kwargs(args, kwargs, _model.keys())
                 super().__init__(**data)
 
-    return LocBaseModel
+        class Config:
+            orm_mode = True
+
+    basis_model = create_model(model_name,
+                               __base__=LocBaseModel,
+                               __validators__=validators,
+                               **fields)
+    return basis_model
