@@ -8,7 +8,8 @@ import uvicorn
 
 import models
 from crud import user_crud, message_crud
-from schemas import Message, User
+# from schemas import Message, User
+import schemas
 
 
 from database import SessionLocal, engine
@@ -73,8 +74,8 @@ class Dependencies:
             )
 
     @classmethod
-    def complete_user_edit(cls, new_user_data: Union[User.Edit, dict]) -> \
-            Callable[[models.User], User.Edit]:
+    def complete_user_edit(cls, new_user_data: Union[schemas.User.Edit, dict]) -> \
+            Callable[[models.User], schemas.User.Edit]:
         """
         Returns a function that returns UserEdit independent of a value and both possible taken new_user_data types \n
         ____
@@ -106,10 +107,10 @@ class Dependencies:
 
             return new_data
 
-        def wrapper(user: models.User) -> User.Edit:
+        def wrapper(user: models.User) -> schemas.User.Edit:
             try:
                 if cls._new_user_data.__class__ is dict:
-                    return User.Edit(**_complete_user_edit(cls._new_user_data, user))
+                    return schemas.User.Edit(**_complete_user_edit(cls._new_user_data, user))
                 else:
                     return cls._new_user_data
 
@@ -127,7 +128,7 @@ def root():
     return {'Main Page': True}
 
 
-@app.get('/users/', response_model=List[User.Get], status_code=status.HTTP_200_OK)
+@app.get('/users/', response_model=List[schemas.User.Get], status_code=status.HTTP_200_OK)
 def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(Dependencies.get_db)):
     users = user_crud.get_users(db, skip, limit)
     return users
@@ -139,7 +140,7 @@ def get_users_count(db: Session = Depends(Dependencies.get_db)):
 
 
 @app.get('/users/{' + Dependencies.RoutingConstants.user_identifier + '}',
-         response_model=User.Get,
+         response_model=schemas.User.Get,
          status_code=status.HTTP_200_OK)
 def get_user(
         user_id: int = Depends(Dependencies.try_to_get_user_id),
@@ -148,8 +149,8 @@ def get_user(
     return user_crud.get_user(db, user_id)
 
 
-@app.post('/users/', response_model=User.Get, status_code=status.HTTP_201_CREATED)
-def post_user(user_data: User.Create, db: Session = Depends(Dependencies.get_db)):
+@app.post('/users/', response_model=schemas.User.Get, status_code=status.HTTP_201_CREATED)
+def post_user(user_data: schemas.User.Create, db: Session = Depends(Dependencies.get_db)):
     try:
         return user_crud.post_user(db, user_data=user_data)
     except ValueError as e:
@@ -162,11 +163,11 @@ def post_user(user_data: User.Create, db: Session = Depends(Dependencies.get_db)
 
 
 @app.put('/users/{' + Dependencies.RoutingConstants.user_identifier + '}',
-         response_model=User.Get,
+         response_model=schemas.User.Get,
          status_code=status.HTTP_200_OK)
 def put_user(
         user_id: int = Depends(Dependencies.try_to_get_user_id),
-        fun_complete_user_edit: Callable[[models.User], User.Edit] = Depends(Dependencies.complete_user_edit),
+        fun_complete_user_edit: Callable[[models.User], schemas.User.Edit] = Depends(Dependencies.complete_user_edit),
         db: Session = Depends(Dependencies.get_db)
 ):
     # Try to update user
@@ -175,7 +176,7 @@ def put_user(
     return user_crud.put_user(db, user=user, new_user_data=new_user_data)
 
 
-@app.delete('/users/{user_identifier}', response_model=User.Get, status_code=status.HTTP_200_OK)
+@app.delete('/users/{user_identifier}', response_model=schemas.User.Get, status_code=status.HTTP_200_OK)
 def delete_user(
         user_id: int = Depends(Dependencies.try_to_get_user_id),
         db: Session = Depends(Dependencies.get_db)
