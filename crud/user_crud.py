@@ -3,6 +3,7 @@ from typing import List, Union
 
 import models
 import schemas
+from crud import general_crud
 
 from crud.crud_decorators import does_raise_error
 
@@ -17,10 +18,12 @@ def get_user(db: Session, user_id: int, **_) -> models.User:
     :return: sought user from model
     :except ValueError: occurs if user is not found by id
     """
-    query = db.query(models.User).filter(models.User.id == user_id).first()
-    if not query:
-        raise ValueError(f'user with id \'{user_id}\' is not found')
-    return query
+    user = general_crud.get_item(db, models.User, user_id)
+
+    if user is not None:
+        return user
+    else:
+        raise ValueError(user, f'user is not found by id')
 
 
 @does_raise_error('raise_error')
@@ -38,10 +41,11 @@ def get_user_by_nik_name(db: Session, nik_name: str, **_) -> models.User:
     :return: sought user from model
     :except ValueError: occurs if user is not found by nick name
     """
-    query = db.query(models.User).filter(models.User.nik_name == nik_name).first()
-    if not query:
-        raise ValueError(f'user with nickname \'{nik_name}\' is not found')
-    return query
+    user = db.query(models.User).filter(models.User.nik_name == nik_name).first()
+    if user:
+        return user
+    else:
+        raise ValueError(nik_name, f'user is not found by nick name')
 
 
 def get_users(db: Session, skip: int = 0, limit: int = 100) -> List[models.User]:
@@ -67,28 +71,26 @@ def get_users_count(db: Session) -> int:
     return db.query(models.User).count()
 
 
-def post_user(db: Session, user_data: schemas.User.Create) -> models.User:
+@does_raise_error('raise_error')
+def post_user(db: Session, new_user_data: schemas.User.Create, **_) -> models.User:
     """
     Tries to post user_data into the table via the session (db)
 
     :param db: current session
-    :param user_data: data required to create a user
+    :param new_user_data: data required to create a user
     :return: created user
     :except ValueError: occurs if user with the given nick name is already taken
     """
 
-    user = get_user_by_nik_name(db, user_data.nik_name, raise_error=False)
-    if user is None:
-        new_user = models.User(**user_data.dict())
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-        return new_user
-    else:
-        raise ValueError(f'This nickname \'{user_data.nik_name}\' is already taken')
+    try:
+        return general_crud.post_item(db, models.User, new_user_data)
+    except Exception as e:
+        print(e)
+        raise ValueError(new_user_data, f'user with that nick name is already created')
 
 
-def put_user(db: Session, user: models.User, new_user_data: schemas.User.Edit) -> models.User:
+@does_raise_error('raise_error')
+def put_user(db: Session, user: models.User, new_user_data: schemas.User.Edit, **_) -> models.User:
     """
     Update user data from the new_user_data
 
@@ -99,22 +101,16 @@ def put_user(db: Session, user: models.User, new_user_data: schemas.User.Edit) -
     :except ValueError: occurs if a user is not found in the database
     """
 
-    found_user = db.get(models.User, user.id)
-    if found_user is None:
-        raise ValueError(f'user is not found in the database')
-
-    keys = user.__dict__.keys()
-    for key in keys:
-        if not str(key).startswith('_') and hasattr(new_user_data, key):
-            new_value = getattr(new_user_data, key)
-            setattr(found_user, key, new_value)
-
-    db.commit()
-    db.refresh(found_user)
-    return found_user
+    found_user = get_user(db, user.id, raise_error=True)
+    try:
+        return general_crud.put_item(db, found_user, new_user_data)
+    except Exception as e:
+        print(e)
+        raise ValueError((user, new_user_data,), f'update user with a data error')
 
 
-def del_user(db: Session, user: models.User) -> None:
+@does_raise_error('raise_error')
+def del_user(db: Session, user: models.User) -> models.User:
     """
     Deletes user
 
@@ -124,9 +120,8 @@ def del_user(db: Session, user: models.User) -> None:
     :except ValueError: occurs if a user is not found in the database
     """
 
-    found_user = db.get(models.User, user.id)
-    if found_user is None:
-        raise ValueError(f'user is not found in the database')
-
+    found_user = get_user(db, user.id, raise_error=True)
     db.delete(found_user)
     db.commit()
+    return found_user
+
