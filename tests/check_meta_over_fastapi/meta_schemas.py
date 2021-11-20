@@ -1,7 +1,5 @@
-from pydantic import BaseModel, create_model, validator
-
-from tests.check_meta_over_fastapi.meta_tests import MetaSchemaFactory, SchemaField
-from tests.check_meta_over_fastapi.meta_tests import InteractionKinds as IK
+from tests.check_meta_over_fastapi.MetaBaseModel.main import MetaSchemaFactory, SchemaField, InteractionKinds as IK, \
+    meta_validator, meta_constructor
 
 
 class BaseSchema(metaclass=MetaSchemaFactory):
@@ -10,7 +8,7 @@ class BaseSchema(metaclass=MetaSchemaFactory):
     password = SchemaField(str, IK.CREATABLE)
     status = SchemaField(int, IK.EDITABLE | IK.GETABLE, 0)
 
-    @MetaSchemaFactory.validator('status')
+    @meta_validator('status')
     def check_status(cls, status):
         if status not in range(4):
             raise ValueError(f'status must be in range [0;4), but now is {status}')
@@ -18,18 +16,18 @@ class BaseSchema(metaclass=MetaSchemaFactory):
             return status
 
     @classmethod
-    @MetaSchemaFactory.constructor_interface(IK.CREATABLE)
+    @meta_constructor(IK.CREATABLE)
     def init_create(cls, name: str, password: str, **kwargs):
         return None
 
     @classmethod
-    @MetaSchemaFactory.constructor_interface(IK.GETABLE)
-    def init_get(cls, id: int, name: str, status: int, **kwargs):
+    @meta_constructor(IK.GETABLE)
+    def init_get(cls, id: int, name: str, status: int = 0, **kwargs):
         return None
 
     @classmethod
-    @MetaSchemaFactory.constructor_interface(IK.EDITABLE)
-    def init_edit(cls, name: str, status: int, **kwargs):
+    @meta_constructor(IK.EDITABLE)
+    def init_edit(cls, name: str, status: int = 0, **kwargs):
         return None
 
 
@@ -38,6 +36,8 @@ class BaseSchema1(metaclass=MetaSchemaFactory):
 
 
 def check_constructors(user_data: dict):
+    print("check constructors:")
+
     kwargs_to_manual_init = BaseSchema.init_create(**user_data)
     print(kwargs_to_manual_init.dict())
 
@@ -56,6 +56,8 @@ def check_constructors(user_data: dict):
 
 
 def check_cross_schemas_constructing(user_data: dict):
+    print("check cross schemas constructing")
+
     # raises error "id field required":
     # edit = BaseSchema.Edit(**user_data)
     # get = BaseSchema.Get(edit)
