@@ -67,7 +67,7 @@ def get_users_count(db: Session) -> int:
     return db.query(models.User).count()
 
 
-def post_user(db: Session, user_data: schemas.UserCreate) -> models.User:
+def post_user(db: Session, user_data: schemas.User.Create) -> models.User:
     """
     Tries to post user_data into the table via the session (db)
 
@@ -88,7 +88,7 @@ def post_user(db: Session, user_data: schemas.UserCreate) -> models.User:
         raise ValueError(f'This nickname \'{user_data.nik_name}\' is already taken')
 
 
-def put_user(db: Session, user: models.User, new_user_data: schemas.UserEdit) -> models.User:
+def put_user(db: Session, user: models.User, new_user_data: schemas.User.Edit) -> models.User:
     """
     Update user data from the new_user_data
 

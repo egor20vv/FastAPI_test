@@ -1,8 +1,9 @@
 import re
+from typing import List, Tuple
 
-from typing import Optional, List, Generator, Tuple
+from MetaBaseModel.main import InteractionKinds as IK, meta_constructor, meta_validator, MetaSchemaFactory, SchemaField
 
-from pydantic import BaseModel, validator, ValidationError
+from pydantic import ValidationError
 from pydantic.error_wrappers import ErrorWrapper
 
 
@@ -66,97 +67,94 @@ class MultiExceptionsHandler(list):
         return info
 
 
-# -- Message classes --
-class BaseMessage(BaseModel):
-    """
-    Base of message table
-    """
-    sender_id: int
-    receiver_id: int
-    text: str
+class Message(metaclass=MetaSchemaFactory):
+    # --------
+    #  Fields
+    # --------
+    id = SchemaField(int, IK.GET)
+    sender_id = SchemaField(int, IK.CREATE | IK.GET)
+    receiver_id = SchemaField(int, IK.CREATE | IK.GET)
+    text = SchemaField(str, IK.ALL)
+    status = SchemaField(int, IK.GET | IK.EDIT, default=0)
 
-    @validator('sender_id')
-    def check_sender_existence(cls, sender_id: int):
-        return sender_id
+    # --------------
+    #  Constructors
+    # --------------
+    @classmethod
+    @meta_constructor(IK.CREATE)
+    def init_create(cls, sender_id: int, receiver_id: int, text: str):
+        return None
 
-    @validator('receiver_id')
-    def check_receiver_existence(cls, receiver_id: int):
-        return receiver_id
+    @classmethod
+    @meta_constructor(IK.EDIT)
+    def init_edit(cls, text: str, status: int = 0):
+        return None
 
-    @validator('text')
+    @classmethod
+    @meta_constructor(IK.GET)
+    def init_edit(cls, id: int, sender_id: int, receiver_id: int, text: str, status: int = 0):
+        return None
+
+    # ------------
+    #  Validators
+    # ------------
+    @meta_validator('text')
     def check_text_message(cls, text: str):
         return text
 
-
-class MessageCreate(BaseMessage):
-    """
-    Has all necessary data to create Message \n
-    Here is no data (fields) to return it to user directly (as like as password)
-    """
-    pass
-
-
-class __MessageGet:
-    """
-    Intermediate class contains fields for MessageEdit and Message classes
-    """
-    status: int
-
-
-class MessageEdit(MessageCreate, __MessageGet):
-    """
-    Contains editable fields
-    """
-
-    @validator('status', check_fields=False)
+    @meta_validator('status')
     def check_status(cls, status: int):
         return status
 
 
-class Message(BaseMessage, __MessageGet):
+class User(metaclass=MetaSchemaFactory):
     """
-    Contains all data except data that cannot be returned
-    (like the password that may be contained in the UserCreate class)
-    """
-    id: int
+    Fields::
 
-    # receiver: User
-    # sender: User
-
-    class Config:
-        orm_mode = True
-
-
-# -- User classes --
-class BaseUser(BaseModel):
-    """
-    Base of user table
-
-    :arg nik_name: acceptable len is [2, 32); accepted letters is [_a-zA-z0-9] + '@' as a first symbol
-    :arg fst_name: acceptable len is [2, 16]
-    :arg sec_name: acceptable len is [2, 16]
+        :id integer
+        :nik_name acceptable len is [2, 32); accepted letters is [_a-zA-z0-9] + '@' as a first symbol
+        :fst_name acceptable len is [2, 16]
+        :sec_name acceptable len is [2, 16]
+        :status acceptable values [0, 1]
+        :received_messages List[Message], default is [],
+        :sent_messages List[Message], default is [],
     """
 
-    nik_name: str
-    fst_name: Optional[str] = None
-    sec_name: Optional[str] = None
+    # --------
+    #  Fields
+    # --------
+    id = SchemaField(int, IK.GET)
+    nik_name = SchemaField(str, IK.ALL)
+    fst_name = SchemaField(str, IK.ALL)
+    sec_name = SchemaField(str, IK.ALL)
+    status = SchemaField(int, IK.GET | IK.EDIT, default=0)
 
-    def __init__(self,
-                 nik_name: str,
-                 fst_name: Optional[str] = None,
-                 sec_name: Optional[str] = None,
-                 **other_data
-                 ):
-        data = {
-            'nik_name': nik_name
-        }
-        if fst_name is not None:
-            other_data['fst_name'] = fst_name
-        if sec_name is not None:
-            other_data['sec_name'] = sec_name
-        super().__init__(**data, **other_data)
+    received_messages = SchemaField(List[Message.Get], IK.GET)
+    sent_messages = SchemaField(List[Message.Get], IK.GET)
 
-    @validator('nik_name')
+    # --------------
+    #  Constructors
+    # --------------
+    @classmethod
+    @meta_constructor(IK.CREATE)
+    def init_create(cls, nik_name: str, fst_name: str, sec_name: str):
+        return None
+
+    @classmethod
+    @meta_constructor(IK.EDIT)
+    def init_edit(cls, nik_name: str, fst_name: str, sec_name: str, status: int = 0):
+        return None
+
+    @classmethod
+    @meta_constructor(IK.GET)
+    def init_edit(cls, id: int, nik_name: str, fst_name: str, sec_name: str,
+                  received_messages: List[Message.Get], sent_messages: List[Message.Get], status: int = 0):
+        return None
+
+    # ------------
+    #  Validators
+    # ------------
+    @meta_validator('nik_name')
     def check_nik_name(cls, nik_name: str):
         if nik_name.startswith('@'):
             nik_name = nik_name.replace('@', '')
@@ -165,12 +163,12 @@ class BaseUser(BaseModel):
                 exc += f'value \'{nik_name}\' is too short'
             if len(nik_name) >= 32:
                 exc += f'value \'{nik_name}\' is too large'
-            if not re.match(r'[_a-zA-z0-9]', nik_name):
+            if not re.match(r'^[\w_]+$', nik_name):
                 exc += f'value \'{nik_name}\' has a wrong format: acceptable chars is (_a-zA-z0-9)'
 
         return '@' + nik_name
 
-    @validator('fst_name')
+    @meta_validator('fst_name')
     def check_fst_name(cls, fst_name: str):
         with MultiExceptionsHandler() as exc:
             if len(fst_name) < 2:
@@ -180,7 +178,7 @@ class BaseUser(BaseModel):
 
         return fst_name
 
-    @validator('sec_name')
+    @meta_validator('sec_name')
     def check_sec_name(cls, sec_name: str):
         with MultiExceptionsHandler() as exc:
             if len(sec_name) < 2:
@@ -190,129 +188,10 @@ class BaseUser(BaseModel):
 
         return sec_name
 
-
-class UserCreate(BaseUser):
-    """
-    Has all necessary data to create User \n
-    Here is no data (fields) to return it to user directly (as like as password)
-
-    :arg nik_name: acceptable len is [2, 32); accepted letters is [_a-zA-z0-9] + '@' as a first symbol
-    :arg fst_name: acceptable len is [2, 16]
-    :arg sec_name: acceptable len is [2, 16]
-    """
-
-    def __init__(self,
-                 nik_name: str,
-                 fst_name: Optional[str] = None,
-                 sec_name: Optional[str] = None,
-                 **other_data
-                 ):
-        super().__init__(nik_name, fst_name, sec_name, **other_data)
-
-
-class _UserGet(BaseModel):
-    """
-    Intermediate class contains fields for UserEdit and User classes
-
-    :arg status: acceptable values [0, 1]
-    """
-
-    status: int  # acceptable values is [0, 1]
-
-    def __init__(self, status: int, **other_data):
-        # self.status = status
-        data = {
-            'status': status
-        }
-        super().__init__(**data, **other_data)
-
-
-class UserEdit(BaseUser, _UserGet):
-    """
-    Contains editable fields
-
-    :arg nik_name: acceptable len is [2, 32); accepted letters is [_a-zA-z0-9] + '@' as a first symbol
-    :arg fst_name: acceptable len is [2, 16]
-    :arg sec_name: acceptable len is [2, 16]
-    :arg status: acceptable values [0, 1]
-    """
-
-    def __init__(self,
-                 nik_name: str,
-                 status: int,
-                 fst_name: Optional[str] = None,
-                 sec_name: Optional[str] = None,
-                 **other_data
-                 ):
-        data = {
-            'status': status
-        }
-
-        super(UserEdit, self).__init__(nik_name, fst_name, sec_name, **data, **other_data)
-
-        # super(_UserGet, self).__init__(status, **other_data)
-
-    @validator('status', check_fields=False)
+    @meta_validator('status')
     def check_status_is_correct(cls, status: int):
         with MultiExceptionsHandler() as exc:
             if status not in (0, 1):
                 exc += f'value \'{status}\' must be in range (0, 1)'
 
         return status
-
-
-class User(BaseUser, _UserGet):
-    """
-    Contains all data except data that cannot be returned
-    (like the password that may be contained in the UserCreate class)
-
-    :arg id: integer
-    :arg nik_name: acceptable len is [2, 32); accepted letters is [_a-zA-z0-9] + '@' as a first symbol
-    :arg fst_name: acceptable len is [2, 16]
-    :arg sec_name: acceptable len is [2, 16]
-    :arg status: acceptable values [0, 1]
-    :arg received_messages: List[Message], default is [],
-    :arg sent_messages: List[Message], default is [],
-    """
-    id: int
-
-    received_messages: List[Message] = []
-    sent_messages: List[Message] = []
-
-    def __init__(self,
-                 _id: int,
-                 nik_name: str,
-                 status: int,
-                 received_messages: List[Message] = None,
-                 sent_messages: List[Message] = None,
-                 fst_name: Optional[str] = None,
-                 sec_name: Optional[str] = None,
-                 **other_data):
-        data = {
-            'id': _id
-        }
-        if received_messages is not None:
-            data['received_messages'] = received_messages
-        if sent_messages is not None:
-            data['sent_messages'] = sent_messages
-
-        super().__init__(nik_name, fst_name, sec_name, **data, **other_data)
-
-    class Config:
-        orm_mode = True
-
-
-# try:
-#     new_user_data = {
-#         'nik_name': "egor20vv",
-#         'status': 0,
-#         'fst_name': 'Egorka'
-#     }
-#     new_user = UserEdit(**new_user_data)
-#     print(new_user.dict())
-#     pass
-# except ValidationError as e:
-#     print(e)
-#     info = MultiExceptionsHandler.get_exception_info(e)
-#     print('dict repr:', info)
-#     pass
